@@ -2,9 +2,6 @@
 
 namespace mradang\LaravelModelExtend\Traits;
 
-use Illuminate\Database\Eloquent\JsonEncodingException;
-use Illuminate\Support\Arr;
-
 trait ModelChangeMessageTrait
 {
     private $_changeMessage = null;
@@ -29,7 +26,7 @@ trait ModelChangeMessageTrait
                     ->values()
                     ->all();
 
-                $model->_changeMessage = '更新：' . collect($model->getDirty())
+                $model->_changeMessage = collect($model->getDirty())
                     ->map(function ($value, $key) use ($model, $casts) {
                         $ori_value = $model->getOriginal($key);
                         if (in_array($key, $casts)) {
@@ -42,14 +39,6 @@ trait ModelChangeMessageTrait
             } else {
                 $model->_changeMessage = null;
             }
-        });
-
-        static::creating(function ($model) {
-            $model->_changeMessage = '创建：' . $model->toJson(JSON_UNESCAPED_UNICODE);
-        });
-
-        static::deleting(function ($model) {
-            $model->_changeMessage = '删除：' . $model->toJson(JSON_UNESCAPED_UNICODE);
         });
     }
 }
