@@ -2,42 +2,62 @@
 
 namespace mradang\LaravelModelExtend\Traits;
 
+use Illuminate\Support\Collection;
+
 trait ModelChangeMessageTrait
 {
-    private $_changeMessage = null;
+    private Collection $_changes;
 
-    public function getChangeMessage()
+    public function getModelChanges($keys = null): Collection
     {
-        return $this->_changeMessage;
+        if (is_string($keys)) {
+            return $this->_changes->only([$keys]);
+        } elseif (is_array($keys)) {
+            return $this->_changes->only($keys);
+        } else {
+            return $this->_changes;
+        }
+    }
+
+    public function getChangeMessage($keys = null): string
+    {
+        return $this->getModelChanges($keys)
+            ->map(function ($item, $key) {
+                return sprintf('「%s」由「%s」改为「%s」', $key, $item['old_value'], $item['new_value']);
+            })
+            ->join('，');
     }
 
     protected static function bootModelChangeMessageTrait()
     {
-        static::updating(function ($model) {
-            if ($model->isDirty()) {
-                // 获取数组转换字段名
-                $casts = collect($model->getCasts())
-                    ->map(function ($value, $key) {
-                        return $value === 'array' ? $key : '';
-                    })
-                    ->filter(function ($value) {
-                        return !empty($value);
-                    })
-                    ->values()
-                    ->all();
+        static::saving(function ($model) {
+            // 获取数组转换字段名
+            $casts = collect($model->getCasts())
+                ->map(function ($value, $key) {
+                    return $value === 'array' ? $key : '';
+                })
+                ->filter(function ($value) {
+                    return !empty($value);
+                })
+                ->values()
+                ->all();
 
-                $model->_changeMessage = collect($model->getDirty())
+            // 记录变更的数据
+            if ($model->isDirty()) {
+                $model->_changes = collect($model->getDirty())
                     ->map(function ($value, $key) use ($model, $casts) {
-                        $ori_value = $model->getOriginal($key);
-                        if (in_array($key, $casts)) {
-                            $ori_value = json_encode($ori_value, JSON_UNESCAPED_UNICODE);
-                            $value = json_encode(json_decode($value, true), JSON_UNESCAPED_UNICODE);
-                        }
-                        return sprintf("「%s」由「%s」改为「%s」", $key, $ori_value, $value);
-                    })
-                    ->join(', ');
+                        $old_value = in_array($key, $casts)
+                            ? json_encode($model->getOriginal($key), JSON_UNESCAPED_UNICODE)
+                            : $model->getOriginal($key);
+
+                        $new_value = in_array($key, $casts)
+                            ? json_encode(json_decode($value, true), JSON_UNESCAPED_UNICODE)
+                            : $value;
+
+                        return compact('old_value', 'new_value');
+                    });
             } else {
-                $model->_changeMessage = null;
+                $model->_changes = collect([]);
             }
         });
     }
